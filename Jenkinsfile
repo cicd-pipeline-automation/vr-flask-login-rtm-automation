@@ -94,7 +94,7 @@ pipeline {
                 echo "📦 Checking out source repository..."
                 checkout([
                     $class: 'GitSCM',
-                    branches: [[name: '*/Automation-Jenkins-RTM']],
+                    branches: [[name: '*/Jenkins-CICD-Pipeline-RTM-Automation']],
                     userRemoteConfigs: [[
                         url: 'https://github.com/ReTechnologies/Jenkins-CICD-Pipeline.git',
                         credentialsId: 'github-credentials'
