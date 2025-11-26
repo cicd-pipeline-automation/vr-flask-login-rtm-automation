@@ -28,6 +28,26 @@ def main():
     url = f"{args.rtm_base}/api/v2/automation/import-test-results"
     headers = {"Authorization": f"Bearer {token}"}
 
+    # ---------------------------------------------------------
+    # 🔥 Jira Mandatory Fields Patch (Fixes Test Execution Creation)
+    # ---------------------------------------------------------
+    jira_description = (
+        "Automated test execution triggered by Jenkins pipeline.\n"
+        f"Build URL: {args.job_url}"
+    )
+
+    jira_acceptance_criteria = (
+        "Automated acceptance criteria placeholder — required by Jira field configuration."
+    )
+
+    jira_metadata = json.dumps({
+        "fields": {
+            "description": jira_description,
+            "customfield_10088": jira_acceptance_criteria
+        }
+    })
+    # ---------------------------------------------------------
+
     print("🚀 Uploading ZIP to RTM...")
 
     with open(args.archive, "rb") as f:
@@ -35,7 +55,9 @@ def main():
         data = {
             "projectKey": args.project,
             "reportType": "JUNIT",
-            "jobUrl": args.job_url
+            "jobUrl": args.job_url,
+            # Inject Jira fields to prevent Jira issue creation failure
+            "metadata": jira_metadata
         }
         response = requests.post(url, headers=headers, files=files, data=data)
 
@@ -65,7 +87,7 @@ def main():
     # Save test execution key
     test_exec = data.get("testExecutionKey")
     if not test_exec:
-        print("⚠ No testExecutionKey returned, cannot write file.")
+        print("⚠ No testExecutionKey returned — Test Execution creation failed.")
         return
 
     with open("rtm_execution_key.txt", "w") as f:

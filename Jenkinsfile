@@ -25,7 +25,7 @@ pipeline {
     /**********************************************************
      🔐 GLOBAL ENVIRONMENT VARIABLES
     **********************************************************/
-     environment {
+    environment {
 
         /* ------------------ SMTP Email ------------------ */
         SMTP_HOST       = credentials('smtp-host2')
@@ -44,7 +44,7 @@ pipeline {
         CONFLUENCE_SPACE = "Jenkins"
         CONFLUENCE_TITLE = "Test Result Report"
 
-        /* ------------------- Jira + RTM ------------------- */
+        /* ------------------- Jira + RTM ------------------ */
         JIRA_URL        = credentials('jira-base-url')
         JIRA_USER       = credentials('jira-user')
         JIRA_API_TOKEN  = credentials('jira-token')
@@ -67,19 +67,8 @@ pipeline {
         PYTHONUTF8        = '1'
         PYTHONLEGACYWINDOWSSTDIO = '1'
 
-        FORCE_FAIL = false
+        FORCE_FAIL = 'false'
     }
-
-    /**********************************************************
-     🧑‍🔧 USER PARAMETERS
-    **********************************************************/
-    // parameters {
-    //     string(
-    //         name: 'RTM_TRIGGERED_BY',
-    //         defaultValue: 'devopsuser8413',
-    //         description: 'RTM user who initiated this execution'
-    //     )
-    // }
 
     /**********************************************************
      🚀 PIPELINE STAGES
@@ -120,7 +109,7 @@ pipeline {
                 """
             }
         }
-        
+
         /* ==================================================
          3) INSTALL PYTHON REQUIREMENTS
         ================================================== */
@@ -150,6 +139,13 @@ pipeline {
                         --html=report/report.html ^
                         --self-contained-html
                 """
+
+                // Optional: force fail switch for debugging
+                script {
+                    if (env.FORCE_FAIL?.toBoolean()) {
+                        error("FORCE_FAIL is true – failing build intentionally.")
+                    }
+                }
             }
         }
 
@@ -165,9 +161,9 @@ pipeline {
             }
             post {
                 always {
-                    archiveArtifacts artifacts: 'report/test_result_report_v*.html'
-                    archiveArtifacts artifacts: 'report/test_result_report_v*.pdf'
-                    archiveArtifacts artifacts: 'report/version.txt'
+                    archiveArtifacts artifacts: 'report/test_result_report_v*.html', fingerprint: true
+                    archiveArtifacts artifacts: 'report/test_result_report_v*.pdf',  fingerprint: true
+                    archiveArtifacts artifacts: 'report/version.txt',                fingerprint: true
                 }
             }
         }
@@ -186,7 +182,7 @@ pipeline {
             }
             post {
                 success {
-                    archiveArtifacts artifacts: "${TEST_RESULTS_ZIP}"
+                    archiveArtifacts artifacts: "${TEST_RESULTS_ZIP}", fingerprint: true
                 }
             }
         }
@@ -211,12 +207,15 @@ pipeline {
          8) ATTACH HTML/PDF REPORTS → JIRA TEST EXECUTION
         ================================================== */
         stage('Attach Reports to RTM/Jira') {
+            when {
+                expression { fileExists('rtm_execution_key.txt') }
+            }
             steps {
                 echo "📎 Attaching PDF/HTML to Jira Test Execution..."
 
                 script {
                     // Read version
-                    def version = readFile("report/version.txt").trim()
+                    def version  = readFile("report/version.txt").trim()
                     echo "ℹ Detected report version: v${version}"
 
                     // Read Jira/RTM Execution Key
@@ -224,7 +223,7 @@ pipeline {
                     echo "🔑 Jira Issue Key: ${issueKey}"
 
                     env.REPORT_VERSION = version
-                    env.RTM_ISSUE_KEY = issueKey
+                    env.RTM_ISSUE_KEY  = issueKey
 
                     def pdfFile  = "report/test_result_report_v${version}.pdf"
                     def htmlFile = "report/test_result_report_v${version}.html"
@@ -235,9 +234,9 @@ pipeline {
 
                 bat """
                     "%VENV_PATH%\\Scripts\\python.exe" scripts\\rtm_attach_reports.py ^
-                    --issueKey "%RTM_ISSUE_KEY%" ^
-                    --pdf "report/test_result_report_v%REPORT_VERSION%.pdf" ^
-                    --html "report/test_result_report_v%REPORT_VERSION%.html"
+                    --issue-key "%RTM_ISSUE_KEY%" ^
+                    --pdf "report\\test_result_report_v%REPORT_VERSION%.pdf" ^
+                    --html "report\\test_result_report_v%REPORT_VERSION%.html"
                 """
             }
         }
@@ -260,7 +259,6 @@ pipeline {
         stage('Email Report') {
             steps {
                 echo "📧 Sending email notification..."
-                echo "Using PDF_REPORT_PATH = ${env.PDF_REPORT_PATH}"
                 bat """
                     "%VENV_PATH%\\Scripts\\python.exe" scripts/send_report_email.py
                 """
@@ -272,8 +270,14 @@ pipeline {
      🧹 POST-BUILD ACTIONS
     **********************************************************/
     post {
-        success { echo "🎉 Pipeline completed successfully." }
-        failure { echo "❌ Pipeline failed — please check logs." }
-        always  { echo "🧹 Workspace cleanup completed." }
+        success {
+            echo "🎉 Pipeline completed successfully."
+        }
+        failure {
+            echo "❌ Pipeline failed — please check logs."
+        }
+        always {
+            echo "🧹 Workspace cleanup completed."
+        }
     }
 }
