@@ -173,19 +173,42 @@ pipeline {
         }
 
         /* ==================================================
-         6) PUBLISH REPORT TO CONFLUENCE
+         6) PACKAGE TEST RESULTS ZIP
         ================================================== */
-        stage('Publish Report to Confluence') {
+        stage('Archive Test Results') {
             steps {
-                echo "🌐 Publishing report to Confluence..."
+                echo "📦 Creating ZIP archive of test results..."
+                powershell """
+                    if (Test-Path ${env.TEST_RESULTS_ZIP}) { Remove-Item ${env.TEST_RESULTS_ZIP} }
+                    Add-Type -AssemblyName System.IO.Compression.FileSystem
+                    [IO.Compression.ZipFile]::CreateFromDirectory('${env.TEST_RESULTS_DIR}', '${env.TEST_RESULTS_ZIP}')
+                """
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: "${TEST_RESULTS_ZIP}"
+                }
+            }
+        }
+
+        /* ==================================================
+         7) UPLOAD TEST RESULTS TO RTM
+        ================================================== */
+        stage('Upload JUnit ZIP to RTM') {
+            steps {
+                echo "📤 Uploading JUnit ZIP to RTM..."
                 bat """
-                    "%VENV_PATH%\\Scripts\\python.exe" scripts/publish_report_confluence.py
+                    "%VENV_PATH%\\Scripts\\python.exe" scripts\\rtm_upload_results.py ^
+                    --archive "test-results.zip" ^
+                    --rtm-base "%RTM_BASE_URL%" ^
+                    --project "%PROJECT_KEY%" ^
+                    --job-url "%BUILD_URL%"
                 """
             }
         }
 
         /* ==================================================
-         7) ATTACH HTML/PDF REPORTS → JIRA TEST EXECUTION
+         8) ATTACH HTML/PDF REPORTS → JIRA TEST EXECUTION
         ================================================== */
         stage('Attach Reports to RTM/Jira') {
             steps {
@@ -220,7 +243,19 @@ pipeline {
         }
 
         /* ==================================================
-         8) EMAIL REPORT TO STAKEHOLDERS
+         9) PUBLISH REPORT TO CONFLUENCE
+        ================================================== */
+        stage('Publish Report to Confluence') {
+            steps {
+                echo "🌐 Publishing report to Confluence..."
+                bat """
+                    "%VENV_PATH%\\Scripts\\python.exe" scripts/publish_report_confluence.py
+                """
+            }
+        }
+
+        /* ==================================================
+         10) EMAIL REPORT TO STAKEHOLDERS
         ================================================== */
         stage('Email Report') {
             steps {
@@ -228,41 +263,6 @@ pipeline {
                 echo "Using PDF_REPORT_PATH = ${env.PDF_REPORT_PATH}"
                 bat """
                     "%VENV_PATH%\\Scripts\\python.exe" scripts/send_report_email.py
-                """
-            }
-        }
-
-        /* ==================================================
-         9) PACKAGE TEST RESULTS ZIP
-        ================================================== */
-        stage('Archive Test Results') {
-            steps {
-                echo "📦 Creating ZIP archive of test results..."
-                powershell """
-                    if (Test-Path ${env.TEST_RESULTS_ZIP}) { Remove-Item ${env.TEST_RESULTS_ZIP} }
-                    Add-Type -AssemblyName System.IO.Compression.FileSystem
-                    [IO.Compression.ZipFile]::CreateFromDirectory('${env.TEST_RESULTS_DIR}', '${env.TEST_RESULTS_ZIP}')
-                """
-            }
-            post {
-                success {
-                    archiveArtifacts artifacts: "${TEST_RESULTS_ZIP}"
-                }
-            }
-        }
-
-        /* ==================================================
-         🔟 UPLOAD TEST RESULTS TO RTM
-        ================================================== */
-        stage('Upload JUnit ZIP to RTM') {
-            steps {
-                echo "📤 Uploading JUnit ZIP to RTM..."
-                bat """
-                    "%VENV_PATH%\\Scripts\\python.exe" scripts\\rtm_upload_results.py ^
-                    --archive "test-results.zip" ^
-                    --rtm-base "%RTM_BASE_URL%" ^
-                    --project "%PROJECT_KEY%" ^
-                    --job-url "%BUILD_URL%"
                 """
             }
         }
