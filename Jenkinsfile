@@ -189,31 +189,32 @@ pipeline {
         ================================================== */
         stage('Attach Reports to RTM/Jira') {
             steps {
-                echo "📚 Attaching PDF/HTML to Jira Test Execution..."
+                echo "📎 Attaching PDF/HTML to Jira Test Execution..."
 
                 script {
-                    version = readFile("report/version.txt").trim()
+                    // Read version
+                    def version = readFile("report/version.txt").trim()
                     echo "ℹ Detected report version: v${version}"
 
-                    // Read the test execution key created by RTM upload
-                    testExecKey = readFile("rtm_execution_key.txt").trim()
-                    echo "📌 Current Test Execution Key: ${testExecKey}"
+                    // Read Jira/RTM Execution Key
+                    def issueKey = readFile("rtm_execution_key.txt").trim()
+                    echo "🔑 Jira Issue Key: ${issueKey}"
 
-                    /* 🔥 Export version for all later stages */
                     env.REPORT_VERSION = version
+                    env.RTM_ISSUE_KEY = issueKey
 
-                    /* 🔥 Build final PDF path & export globally */
-                    env.PDF_REPORT_PATH = "report/test_result_report_v${version}.pdf"
+                    def pdfFile  = "report/test_result_report_v${version}.pdf"
+                    def htmlFile = "report/test_result_report_v${version}.html"
 
-                    echo "📄 PDF Path  : ${env.PDF_REPORT_PATH}"
-                    echo "🌐 HTML Path : report/test_result_report_v${version}.html"
+                    echo "📄 PDF Path  : ${pdfFile}"
+                    echo "🌐 HTML Path : ${htmlFile}"
                 }
 
                 bat """
                     "%VENV_PATH%\\Scripts\\python.exe" scripts\\rtm_attach_reports.py ^
-                    --issueKey "${testExecKey}" ^
-                    --pdf  "report/test_result_report_v${version}.pdf" ^
-                    --html "report/test_result_report_v${version}.html"
+                    --issueKey "%RTM_ISSUE_KEY%" ^
+                    --pdf "report/test_result_report_v%REPORT_VERSION%.pdf" ^
+                    --html "report/test_result_report_v%REPORT_VERSION%.html"
                 """
             }
         }
