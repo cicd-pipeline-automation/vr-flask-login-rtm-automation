@@ -33,7 +33,7 @@ pipeline {
         SMTP_USER       = credentials('smtp-user2')
         SMTP_PASS       = credentials('smtp-pass2')
         REPORT_FROM     = credentials('sender-email')
-        REPORT_TO       = credentials('receiver-email')
+        REPORT_TO       = credentials('multi-receivers')
         REPORT_CC       = credentials('cc-email')
         REPORT_BCC      = credentials('bcc-email')
 
