@@ -197,7 +197,6 @@ QA Automation System
 
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
 
-        # TLS only if common SMTP ports
         if SMTP_PORT in (587, 465):
             try:
                 s.starttls()
@@ -210,7 +209,9 @@ QA Automation System
             except Exception as e:
                 print(f"⚠ SMTP AUTH failed/skipped: {e}")
 
-        s.send_message(msg, to_addrs=all_recipients)
+        # NEW FIX — send to all recipients manually
+        raw_msg = msg.as_string()
+        s.sendmail(FROM_EMAIL, all_recipients, raw_msg)
 
     print("✅ Email sent successfully.")
 
