@@ -7,6 +7,8 @@ def parse_args():
     p.add_argument("--rtm-base", required=True)
     p.add_argument("--project", required=True)
     p.add_argument("--job-url", required=True)
+    p.add_argument("--description", required=True, help="Jira Test Execution description")
+    p.add_argument("--acceptance", required=True, help="Acceptance Criteria text")
     p.add_argument("--folder-id", required=False)
     return p.parse_args()
 
@@ -34,19 +36,16 @@ def main():
     url = args.rtm_base.rstrip("/") + "/api/v2/automation/import-test-results"
     headers = {"Authorization": f"Bearer {token}"}
 
-    # ===== ADF Fix for Jira Cloud =====
-    description_adf = to_adf(
-        f"Automated Test Execution triggered by Jenkins pipeline.\nBuild URL: {args.job_url}"
-    )
-    acceptance_adf = to_adf(
-        "Automated Acceptance Criteria satisfied (CI/CD execution)."
-    )
+    # Convert description + acceptance into Jira ADF
+    description_adf = to_adf(args.description)
+    acceptance_adf = to_adf(args.acceptance)
 
     jira_fields = {
         "description": description_adf,
-        "customfield_10088": acceptance_adf
+        "customfield_10088": acceptance_adf   # Acceptance Criteria
     }
 
+    # Folder field (if provided)
     if args.folder_id:
         jira_fields["customfield_10075"] = args.folder_id
 
@@ -74,6 +73,7 @@ def main():
 
     status_url = args.rtm_base.rstrip("/") + f"/api/v2/automation/import-status/{task_id}"
 
+    # Poll until finished
     while True:
         r = requests.get(status_url, headers=headers)
         d = r.json()
@@ -95,7 +95,6 @@ def main():
         f.write(te_key)
 
     print("📝 Saved Test Execution Key:", te_key)
-
 
 if __name__ == "__main__":
     main()

@@ -193,13 +193,16 @@ pipeline {
         stage('Upload JUnit ZIP to RTM') {
             steps {
                 echo "📤 Uploading JUnit ZIP to RTM..."
+
                 bat """
                     "%VENV_PATH%\\Scripts\\python.exe" scripts\\rtm_upload_results.py ^
-                        --archive "test-results.zip" ^
-                        --rtm-base "%RTM_BASE_URL%" ^
-                        --project "%PROJECT_KEY%" ^
-                        --job-url "%BUILD_URL%" ^
-                        --folder-id "7a2911d3-7421-4d99-89f7-762313d01b40"
+                    --archive "test-results.zip" ^
+                    --rtm-base "%RTM_BASE_URL%" ^
+                    --project "%PROJECT_KEY%" ^
+                    --job-url "%BUILD_URL%" ^
+                    --description "Automated Test Execution for Jenkins Build %BUILD_NUMBER%" ^
+                    --acceptance "All automated tests executed successfully for Jenkins Build %BUILD_NUMBER%" ^
+                    --folder-id "7a2911d3-7421-4d99-89f7-762313d01b40"
                 """
             }
         }
