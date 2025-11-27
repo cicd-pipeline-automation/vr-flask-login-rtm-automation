@@ -6,22 +6,24 @@ import json
 import time
 
 # =========================================================
-# Parse Arguments
+# Parse CLI Arguments
 # =========================================================
 def parse_args():
     p = argparse.ArgumentParser(description="Upload JUnit test results to RTM Cloud")
-    p.add_argument("--archive", required=True, help="Path to test-results.zip")
-    p.add_argument("--rtm-base", required=True, help="Base RTM Cloud URL")
-    p.add_argument("--project", required=True, help="RTM Project Key e.g. CR0B")
+
+    p.add_argument("--archive", required=True, help="test-results.zip")
+    p.add_argument("--rtm-base", required=True, help="RTM Cloud Base URL")
+    p.add_argument("--project", required=True, help="RTM Project Key (Example: CR0B)")
     p.add_argument("--job-url", required=True, help="Jenkins Build URL")
-    p.add_argument("--description", required=True, help="Description for Test Execution")
-    p.add_argument("--acceptance", required=True, help="Acceptance Criteria text")
+    p.add_argument("--description", required=True, help="Test Execution Description")
+    p.add_argument("--acceptance", required=True, help="Acceptance Criteria")
     p.add_argument("--folder-id", required=False, help="RTM Folder ID")
+
     return p.parse_args()
 
 
 # =========================================================
-# Convert text → Atlassian Document Format
+# Convert Text → Atlassian Document Format (ADF)
 # =========================================================
 def to_adf(text):
     return {
@@ -37,36 +39,37 @@ def to_adf(text):
 
 
 # =========================================================
-# MAIN SCRIPT
+# Main Function
 # =========================================================
 def main():
     args = parse_args()
 
+    # RTM API Token from Jenkins Credentials
     token = os.getenv("RTM_API_TOKEN")
     if not token:
-        raise SystemExit("❌ Missing RTM_API_TOKEN env variable")
+        raise SystemExit("❌ Missing RTM_API_TOKEN environment variable")
 
     headers = {"Authorization": f"Bearer {token}"}
 
-    # ------------------ Build RTM Import URL ------------------
+    # ========== 1) RTM Import Endpoint ==========
     import_url = args.rtm_base.rstrip("/") + "/api/v2/automation/import-test-results"
 
-    # Convert to ADF (Jira Cloud compatible)
     description_adf = to_adf(args.description)
-    acceptance_adf = to_adf(args.acceptance)
+    acceptance_adf  = to_adf(args.acceptance)
 
     jira_fields = {
         "description": description_adf,
-        "customfield_10088": acceptance_adf  # Acceptance Criteria
+        "customfield_10088": acceptance_adf     # Acceptance Criteria
     }
 
-    # NOTE: Do NOT send customfield_10075 (Folder) here!
-    # Jira validation blocks it. We move TE later using RTM API.
+    # ❗ DO NOT include folder here — Jira screen validation blocks it.
 
     test_execution_fields = {"fields": jira_fields}
     test_execution_fields_str = json.dumps(test_execution_fields)
 
+    # -------------------------------------------------------
     print("\n🚀 Uploading ZIP to RTM...")
+    # -------------------------------------------------------
 
     with open(args.archive, "rb") as f:
         files = {"file": f}
@@ -76,6 +79,7 @@ def main():
             "jobUrl": args.job_url,
             "testExecutionFields": test_execution_fields_str
         }
+
         response = requests.post(import_url, headers=headers, files=files, data=data)
 
     if response.status_code not in (200, 202):
@@ -86,7 +90,7 @@ def main():
     task_id = response.text.strip()
     print(f"📌 RTM Task ID: {task_id}")
 
-    # ------------------ Poll Import Status ------------------
+    # ========== 2) POLL RTM IMPORT STATUS ==========
     status_url = args.rtm_base.rstrip("/") + f"/api/v2/automation/import-status/{task_id}"
 
     while True:
@@ -96,6 +100,7 @@ def main():
 
         if d.get("status") != "IMPORTING":
             break
+
         time.sleep(2)
 
     print("\n🎉 Import result:")
@@ -103,36 +108,40 @@ def main():
 
     te_key = d.get("testExecutionKey")
     if not te_key:
-        print("❌ No testExecutionKey returned — Jira creation failed")
+        print("❌ No testExecutionKey returned — Jira TE creation failed.")
         return
 
     print(f"📝 Test Execution Created: {te_key}")
 
-    # Save TE key for next stages
+    # Save TE key for next Jenkins stages
     with open("rtm_execution_key.txt", "w") as f:
         f.write(te_key)
 
     # =========================================================
-    # OPTION 2 — MOVE TEST EXECUTION TO FOLDER (AFTER CREATION)
+    # 3) UPDATE RTM FOLDER (Correct Cloud Endpoint)
     # =========================================================
     if args.folder_id:
-        move_url = args.rtm_base.rstrip("/") + f"/api/v2/test-execution/{te_key}/move"
+        patch_url = args.rtm_base.rstrip("/") + f"/api/v1/test-executions/{te_key}"
         payload = {"folderId": args.folder_id}
 
-        print(f"\n📁 Moving Test Execution to folder {args.folder_id} ...")
-        move_res = requests.post(move_url, headers=headers, json=payload)
+        print(f"\n📁 Updating Test Execution folder to {args.folder_id} ...")
+        move_res = requests.patch(
+            patch_url,
+            headers={**headers, "Content-Type": "application/json"},
+            json=payload
+        )
 
-        if move_res.status_code == 200:
-            print("✅ Folder move successful!")
+        if move_res.status_code in (200, 204):
+            print("✅ Folder update successful!")
         else:
-            print("⚠️ Folder move failed:")
-            print(move_res.text)
+            print("⚠️ Folder update failed:")
+            print(move_res.status_code, move_res.text)
 
     print("\n✅ Completed successfully.")
 
 
 # =========================================================
-# ENTRY POINT
+# Entry Point
 # =========================================================
 if __name__ == "__main__":
     main()
